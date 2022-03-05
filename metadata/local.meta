@@ -1,0 +1,41 @@
+[app/ui]
+owner = admin
+version = 8.2.5
+modtime = 1646500729.379689000
+
+[app/launcher]
+owner = admin
+version = 8.2.5
+modtime = 1646500729.380762000
+
+[app/package/check_for_updates]
+version = 8.2.5
+modtime = 1646500729.381208000
+
+[views/hackathon]
+export = none
+owner = admin
+version = 8.2.5
+modtime = 1646502080.391966000
+
+[views/hackathon_compare]
+export = none
+owner = admin
+version = 8.2.5
+modtime = 1646510405.399785000
+
+[nav/default]
+version = 8.2.5
+modtime = 1646522980.379228000
+
+[props/_json/EVAL-simId]
+export = none
+owner = admin
+version = 8.2.5
+modtime = 1646501431.283979000
+
+[views/hackathon_compare_rl]
+export = none
+owner = admin
+version = 8.2.5
+modtime = 1646523857.154898000

@@ -1,0 +1,6 @@
+<nav search_view="search" color="#5CC05C">
+  <view name="hackathon" />
+  <view name="hackathon_compare" />
+  <view name="hackathon_compare_rl" />
+  <view name="search" default="true" />
+</nav>

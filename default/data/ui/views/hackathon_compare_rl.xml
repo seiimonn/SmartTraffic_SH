@@ -1,0 +1,378 @@
+<form theme="dark">
+  <label>Hackathon Compare RL</label>
+  <search id="detailsBase">
+    <query>
+      index=hack simId IN ("$tok_simulation_1$","$tok_simulation_2$")
+| eventstats max(time) AS simDuration by simId
+| eval _time = now() - simDuration + time
+| rename @* AS *
+| stats sum(fuel) AS totalFuelConsumption sum(noise) AS totalNoise sum(waiting) AS totalWaitingTime sum(CO2) AS totalEmissions avg(speed) AS avgSpeed by simId
+| foreach total* [eval &lt;&lt;FIELD&gt;&gt; = round(&lt;&lt;FIELD&gt;&gt;)]
+| foreach avg* [eval &lt;&lt;FIELD&gt;&gt; = round(&lt;&lt;FIELD&gt;&gt;,4)]
+| appendpipe [
+  stats list(*) AS *
+  | eval totalFuelConsumption = abs(tonumber(mvindex(totalFuelConsumption, 0)) - tonumber(mvindex(totalFuelConsumption, 1)))
+  | eval totalNoise = abs(tonumber(mvindex(totalNoise, 0)) - tonumber(mvindex(totalNoise, 1)))
+  | eval totalWaitingTime = abs(tonumber(mvindex(totalWaitingTime, 0)) - tonumber(mvindex(totalWaitingTime, 1)))
+  | eval totalEmissions = abs(tonumber(mvindex(totalEmissions, 0)) - tonumber(mvindex(totalEmissions, 1)))
+  | eval avgSpeed = abs(tonumber(mvindex(avgSpeed, 0)) - tonumber(mvindex(avgSpeed, 1)))
+]
+| eval simId = if(mvcount(simId) &gt; 1, "abs_diff", simId)
+    </query>
+  </search>
+  <search id="scoreBase">
+    <query>
+      index=hack simId = "$tok_simulation_score_selector$"
+| eventstats max(time) AS simDuration by simId
+| eval _time = now() - simDuration + time
+| rename @* AS *
+| stats sum(fuel) AS totalFuelConsumption sum(noise) AS totalNoise sum(waiting) AS totalWaitingTime sum(CO2) AS totalEmissions avg(speed) AS avgSpeed by simId
+| foreach total* [eval &lt;&lt;FIELD&gt;&gt; = round(&lt;&lt;FIELD&gt;&gt;)]
+| foreach avg* [eval &lt;&lt;FIELD&gt;&gt; = round(&lt;&lt;FIELD&gt;&gt;,4)]
+| eventstats max(total*) AS maxtotal*
+| fields - maxsimId minsimId
+| foreach total* [eval &lt;&lt;FIELD&gt;&gt;_SCORE = &lt;&lt;FIELD&gt;&gt; / max&lt;&lt;FIELD&gt;&gt;]
+| eval finalScore = 0
+| foreach *_SCORE [eval finalScore = finalScore + &lt;&lt;FIELD&gt;&gt;]
+    </query>
+  </search>
+  <fieldset submitButton="false">
+    <input type="dropdown" token="tok_simulation_1" searchWhenChanged="true">
+      <label>Simulation 1</label>
+      <fieldForLabel>ident</fieldForLabel>
+      <fieldForValue>simId</fieldForValue>
+      <search>
+        <query>index=hack
+| rex field=simId "(?&lt;launchTime&gt;[^_]+)_(?&lt;simName&gt;.*)"
+| convert ctime(launchTime)
+| eval ident = simName." - ".launchTime
+| stats values(ident) AS ident by simId
+| where isnotnull(ident)</query>
+        <earliest>-24h@h</earliest>
+        <latest>now</latest>
+      </search>
+      <change>
+        <set token="simulation_ident_1">$result.ident$</set>
+      </change>
+    </input>
+    <input type="dropdown" token="tok_simulation_2" searchWhenChanged="true">
+      <label>Simulation 2</label>
+      <fieldForLabel>ident</fieldForLabel>
+      <fieldForValue>simId</fieldForValue>
+      <search>
+        <query>index=hack
+| rex field=simId "(?&lt;launchTime&gt;[^_]+)_(?&lt;simName&gt;.*)"
+| convert ctime(launchTime)
+| eval ident = simName." - ".launchTime
+| stats values(ident) AS ident by simId
+| where isnotnull(ident)</query>
+        <earliest>-24h@h</earliest>
+        <latest>now</latest>
+      </search>
+      <change>
+        <set token="simulation_ident_2">$result.ident$</set>
+      </change>
+    </input>
+    <input type="text" token="tok_simulation_score_selector" searchWhenChanged="true">
+      <label>Score Simulations Selector</label>
+      <default>*</default>
+      <initialValue>*</initialValue>
+    </input>
+  </fieldset>
+  <row>
+    <panel>
+      <title>Score Ratings</title>
+      <chart>
+        <search base="scoreBase">
+          <query>| table simId finalScore
+| sort finalScore</query>
+        </search>
+        <option name="charting.axisY.scale">log</option>
+        <option name="charting.chart">column</option>
+        <option name="charting.chart.showDataLabels">minmax</option>
+        <option name="charting.drilldown">none</option>
+      </chart>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <single>
+        <title>Relative Score Sim 1</title>
+        <search base="scoreBase">
+          <query>
+| search simId = "$tok_simulation_1$"
+| table finalScore</query>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="numberPrecision">0.000</option>
+        <option name="rangeColors">["0x53a051","0x0877a6","0xf8be34","0xf1813f","0xdc4e41"]</option>
+        <option name="refresh.display">progressbar</option>
+      </single>
+    </panel>
+    <panel>
+      <single>
+        <title>Relative Score Sim 2</title>
+        <search base="scoreBase">
+          <query>
+| search simId = "$tok_simulation_2$"
+| table finalScore</query>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="numberPrecision">0.000</option>
+        <option name="rangeColors">["0x53a051","0x0877a6","0xf8be34","0xf1813f","0xdc4e41"]</option>
+        <option name="refresh.display">progressbar</option>
+      </single>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <title>FuelConsumption Comparison</title>
+      <single>
+        <title>FuelConsumption Sim 1</title>
+        <search base="detailsBase">
+          <query>| search simId = "$tok_simulation_1$"
+| table totalFuelConsumption</query>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+      </single>
+      <single>
+        <title>FuelConsumption Sim 2</title>
+        <search base="detailsBase">
+          <query>| search simId = "$tok_simulation_2$"
+| table totalFuelConsumption</query>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+      </single>
+      <single>
+        <title>FuelConsumption Sim Difference</title>
+        <search base="detailsBase">
+          <query>| search simId = "abs_diff"
+| table totalFuelConsumption</query>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+      </single>
+    </panel>
+    <panel>
+      <title>Emissions Comparison</title>
+      <single>
+        <title>Emissions Sim 1</title>
+        <search base="detailsBase">
+          <query>| search simId = "$tok_simulation_1$"
+| table totalEmissions</query>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+      </single>
+      <single>
+        <title>Emissions Sim 2</title>
+        <search base="detailsBase">
+          <query>| search simId = "$tok_simulation_2$"
+| table totalEmissions</query>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+      </single>
+      <single>
+        <title>Emissions Sim Difference</title>
+        <search base="detailsBase">
+          <query>| search simId = "abs_diff"
+| table totalEmissions</query>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+      </single>
+    </panel>
+    <panel>
+      <title>Noise Comparison</title>
+      <single>
+        <title>Noise Sim 1</title>
+        <search base="detailsBase">
+          <query>| search simId = "$tok_simulation_1$"
+| table totalNoise</query>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+      </single>
+      <single>
+        <title>Noise Sim 2</title>
+        <search base="detailsBase">
+          <query>| search simId = "$tok_simulation_2$"
+| table totalNoise</query>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+      </single>
+      <single>
+        <title>Noise Sim Difference</title>
+        <search base="detailsBase">
+          <query>| search simId = "abs_diff"
+| table totalNoise</query>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+      </single>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <title>WaitingTime Comparison</title>
+      <single>
+        <title>WaitingTime Sim 1</title>
+        <search base="detailsBase">
+          <query>| search simId = "$tok_simulation_1$"
+| table totalWaitingTime</query>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+      </single>
+      <single>
+        <title>WaitingTime Sim 2</title>
+        <search base="detailsBase">
+          <query>| search simId = "$tok_simulation_2$"
+| table totalWaitingTime</query>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+      </single>
+      <single>
+        <title>WaitingTime Sim Difference</title>
+        <search base="detailsBase">
+          <query>| search simId = "abs_diff"
+| table totalWaitingTime</query>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="rangeColors">["0x53a051","0x0877a6","0xf8be34","0xf1813f","0xdc4e41"]</option>
+        <option name="refresh.display">progressbar</option>
+        <option name="useThousandSeparators">1</option>
+      </single>
+    </panel>
+    <panel>
+      <title>avgSpeed Comparison</title>
+      <single>
+        <title>avgSpeed Sim 1</title>
+        <search base="detailsBase">
+          <query>| search simId = "$tok_simulation_1$"
+| table avgSpeed</query>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="numberPrecision">0.000</option>
+        <option name="rangeColors">["0x53a051","0x0877a6","0xf8be34","0xf1813f","0xdc4e41"]</option>
+        <option name="refresh.display">progressbar</option>
+      </single>
+      <single>
+        <title>avgSpeed Sim 2</title>
+        <search base="detailsBase">
+          <query>| search simId = "$tok_simulation_2$"
+| table avgSpeed</query>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="numberPrecision">0.000</option>
+        <option name="rangeColors">["0x53a051","0x0877a6","0xf8be34","0xf1813f","0xdc4e41"]</option>
+        <option name="refresh.display">progressbar</option>
+      </single>
+      <single>
+        <title>avgSpeed Sim Difference</title>
+        <search base="detailsBase">
+          <query>| search simId = "abs_diff"
+| table avgSpeed</query>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="numberPrecision">0.000</option>
+        <option name="rangeColors">["0x53a051","0x0877a6","0xf8be34","0xf1813f","0xdc4e41"]</option>
+        <option name="refresh.display">progressbar</option>
+      </single>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <input type="dropdown" token="tok_time_series" searchWhenChanged="true">
+        <label>Data Series</label>
+        <fieldForLabel>column</fieldForLabel>
+        <fieldForValue>column</fieldForValue>
+        <search>
+          <query>index=hack simId IN ("$tok_simulation_1$","$tok_simulation_2$")
+| head 1
+| rename @* AS *
+| transpose
+| table column
+| search column != _*
+| search NOT column IN (angle, eclass, eventtype, host, id, index, lane, linecount, punct, route, simId, x, y, source, sourcetype, splunk*, seed, time, type, pos)</query>
+          <earliest>-24h@h</earliest>
+          <latest>now</latest>
+        </search>
+      </input>
+      <input type="dropdown" searchWhenChanged="true">
+        <label>Mode</label>
+        <choice value="avg">Average</choice>
+        <choice value="cum">Cumulative</choice>
+        <change>
+          <condition label="Average">
+            <set token="showAvg">1</set>
+            <unset token="showCum"></unset>
+          </condition>
+          <condition label="Cumulative">
+            <set token="showCum">1</set>
+            <unset token="showAvg"></unset>
+          </condition>
+        </change>
+      </input>
+      <input type="text" token="tok_time_span" searchWhenChanged="true">
+        <label>Span</label>
+        <default>1</default>
+        <initialValue>1</initialValue>
+      </input>
+    </panel>
+  </row>
+  <row>
+    <panel depends="$showAvg$">
+      <title>Simulation Avg by all Edges</title>
+      <chart>
+        <search>
+          <query>index=hack simId IN ("$tok_simulation_1$","$tok_simulation_2$")
+| eventstats max(time) AS simDuration by simId
+| eval _time = now() - simDuration + time
+| rename @* AS *
+| timechart span="$tok_time_span$" avg($tok_time_series$) AS $tok_time_series$ by simId
+| eval simulation_1 = '$tok_simulation_1$',
+       simulation_2 = '$tok_simulation_2$'
+| where isnotnull(simulation_1) AND isnotnull(simulation_2)
+| table _time simulation_1 simulation_2</query>
+          <earliest>-24h@h</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="charting.axisY.scale">linear</option>
+        <option name="charting.axisY2.enabled">1</option>
+        <option name="charting.chart">line</option>
+        <option name="charting.drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+      </chart>
+    </panel>
+    <panel depends="$showCum$">
+      <title>Simulation Cumulative by all Edges</title>
+      <chart>
+        <search>
+          <query>index=hack simId IN ("$tok_simulation_1$","$tok_simulation_2$")
+| eventstats max(time) AS simDuration by simId
+| eval _time = now() - simDuration + time
+| rename @* AS *
+| timechart span="$tok_time_span$" avg($tok_time_series$) AS $tok_time_series$ by simId
+| eval simulation_1 = '$tok_simulation_1$',
+       simulation_2 = '$tok_simulation_2$'
+| where isnotnull(simulation_1) AND isnotnull(simulation_2)
+| table _time simulation_1 simulation_2
+| streamstats sum(simulation_1) AS simulation_1 sum(simulation_2) AS simulation_2</query>
+          <earliest>-24h@h</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="charting.axisY.scale">linear</option>
+        <option name="charting.axisY2.enabled">1</option>
+        <option name="charting.chart">line</option>
+        <option name="charting.drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+      </chart>
+    </panel>
+  </row>
+</form>

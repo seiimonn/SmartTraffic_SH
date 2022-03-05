@@ -1,0 +1,105 @@
+<form theme="dark">
+  <label>Hackathon</label>
+  <fieldset submitButton="false">
+    <input type="dropdown" token="tok_simulation" searchWhenChanged="true">
+      <label>Simulation</label>
+      <fieldForLabel>ident</fieldForLabel>
+      <fieldForValue>simId</fieldForValue>
+      <search>
+        <query>index=hack
+| rex field=simId "(?&lt;launchTime&gt;[^_]+)_(?&lt;simName&gt;.*)"
+| convert ctime(launchTime)
+| eval ident = simName." - ".simSteps." - ".launchTime
+| stats values(ident) AS ident by simId
+| where isnotnull(ident)</query>
+        <earliest>-24h@h</earliest>
+        <latest>now</latest>
+      </search>
+    </input>
+  </fieldset>
+  <row>
+    <panel>
+      <input type="multiselect" token="tok_time_series" searchWhenChanged="true">
+        <label>Data Series</label>
+        <choice value="*">All</choice>
+        <fieldForLabel>column</fieldForLabel>
+        <fieldForValue>column</fieldForValue>
+        <search>
+          <query>index=hack simId = "$tok_simulation$"
+| table *
+| transpose
+| table column
+| search column IN ("last*","emissions","Noise","FuelConsumption","WaitingTime")</query>
+          <earliest>-24h@h</earliest>
+          <latest>now</latest>
+        </search>
+        <delimiter> </delimiter>
+      </input>
+      <input type="text" token="tok_time_span" searchWhenChanged="true">
+        <label>Span</label>
+        <default>1</default>
+        <initialValue>1</initialValue>
+      </input>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <title>Simulation Avg by all Edges</title>
+      <chart>
+        <search>
+          <query>index=hack simId = "$tok_simulation$"
+| eval _time = now() - simSteps + simStep
+| fields - simId
+| timechart span="$tok_time_span$" avg($tok_time_series$) AS $tok_time_series$
+| where isnotnull($tok_time_series$)
+| streamstats sum($tok_time_series$) as cumulative_$tok_time_series$</query>
+          <earliest>-24h@h</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="charting.axisY.scale">linear</option>
+        <option name="charting.axisY2.enabled">1</option>
+        <option name="charting.chart">line</option>
+        <option name="charting.chart.nullValueMode">connect</option>
+        <option name="charting.chart.overlayFields">cumulative_FuelConsumption,cumulative_Noise,cumulative_WaitingTime,cumulative_emissions,cumulative_lastStepHaltingNumber,cumulative_lastStepLength,cumulative_lastStepMeanSpeed,cumulative_lastStepOccupancy,cumulative_lastStepVehicleNumber</option>
+        <option name="charting.drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+      </chart>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <title>Edge Drilldown</title>
+      <input type="dropdown" token="tok_time_func" searchWhenChanged="true">
+        <label>Function</label>
+        <choice value="avg">Average</choice>
+        <choice value="sum">Sum</choice>
+      </input>
+      <input type="dropdown" token="tok_time_edge" searchWhenChanged="true">
+        <label>Edge</label>
+        <choice value="*">All</choice>
+        <default>*</default>
+        <initialValue>*</initialValue>
+        <fieldForLabel>edgeId</fieldForLabel>
+        <fieldForValue>edgeId</fieldForValue>
+        <search>
+          <query>index=hack simId = "$tok_simulation$"
+| stats count by edgeId</query>
+          <earliest>-24h@h</earliest>
+          <latest>now</latest>
+        </search>
+      </input>
+      <chart>
+        <search>
+          <query>index=hack simId = "$tok_simulation$" edgeId="$tok_time_edge$"
+| eval _time = now() - simSteps + simStep
+| timechart span="$tok_time_span$" $tok_time_func$($tok_time_series$) AS $tok_time_series$ by edgeId useother=f</query>
+          <earliest>0</earliest>
+          <latest></latest>
+        </search>
+        <option name="charting.chart">line</option>
+        <option name="charting.drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+      </chart>
+    </panel>
+  </row>
+</form>
