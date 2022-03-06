@@ -338,7 +338,7 @@
 | timechart span="$tok_time_span$" avg($tok_time_series$) AS $tok_time_series$ by simId
 | eval simulation_1 = '$tok_simulation_1$',
        simulation_2 = '$tok_simulation_2$'
-| where isnotnull(simulation_1) AND isnotnull(simulation_2)
+| where isnotnull(simulation_1) OR isnotnull(simulation_2)
 | table _time simulation_1 simulation_2</query>
           <earliest>-24h@h</earliest>
           <latest>now</latest>
@@ -361,7 +361,7 @@
 | timechart span="$tok_time_span$" avg($tok_time_series$) AS $tok_time_series$ by simId
 | eval simulation_1 = '$tok_simulation_1$',
        simulation_2 = '$tok_simulation_2$'
-| where isnotnull(simulation_1) AND isnotnull(simulation_2)
+| where isnotnull(simulation_1) OR isnotnull(simulation_2)
 | table _time simulation_1 simulation_2
 | streamstats sum(simulation_1) AS simulation_1 sum(simulation_2) AS simulation_2</query>
           <earliest>-24h@h</earliest>

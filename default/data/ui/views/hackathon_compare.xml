@@ -32,6 +32,7 @@
 | foreach total* [eval &lt;&lt;FIELD&gt;&gt;_SCORE = &lt;&lt;FIELD&gt;&gt; / max&lt;&lt;FIELD&gt;&gt;]
 | eval finalScore = 0
 | foreach *_SCORE [eval finalScore = finalScore + &lt;&lt;FIELD&gt;&gt;]
+| eval finalScore = finalScore + 2 * totalWaitingTime_SCORE
     </query>
   </search>
   <fieldset submitButton="false">
@@ -404,7 +405,7 @@
 | timechart span="$tok_time_span$" avg($tok_time_series$) AS $tok_time_series$ by simId
 | eval simulation_1 = '$tok_simulation_1$',
        simulation_2 = '$tok_simulation_2$'
-| where isnotnull(simulation_1) AND isnotnull(simulation_2)
+| where isnotnull(simulation_1) OR isnotnull(simulation_2)
 | table _time simulation_1 simulation_2</query>
           <earliest>-24h@h</earliest>
           <latest>now</latest>
@@ -425,12 +426,13 @@
 | timechart span="$tok_time_span$" avg($tok_time_series$) AS $tok_time_series$ by simId
 | eval simulation_1 = '$tok_simulation_1$',
        simulation_2 = '$tok_simulation_2$'
-| where isnotnull(simulation_1) AND isnotnull(simulation_2)
+| where isnotnull(simulation_1) OR isnotnull(simulation_2)
 | table _time simulation_1 simulation_2
 | streamstats sum(simulation_1) AS simulation_1 sum(simulation_2) AS simulation_2</query>
           <earliest>-24h@h</earliest>
           <latest>now</latest>
         </search>
+        <option name="charting.axisY.abbreviation">none</option>
         <option name="charting.axisY.scale">linear</option>
         <option name="charting.axisY2.enabled">1</option>
         <option name="charting.chart">line</option>
